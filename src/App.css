@@ -1,0 +1,44 @@
+:root {
+  font-family: "Hiragino Sans", system-ui, sans-serif;
+  color: #2b2b33;
+  background: #f7f6f2;
+  font-size: 14px;
+}
+body { margin: 0; }
+main { max-width: 1120px; margin: 0 auto; padding: 16px 24px 48px; }
+header { display: flex; align-items: center; gap: 24px; border-bottom: 2px solid #e6e2d8; padding-bottom: 10px; margin-bottom: 16px; }
+h1 { font-size: 20px; margin: 0; }
+h2 { font-size: 15px; margin: 22px 0 8px; border-left: 4px solid #7c9c6b; padding-left: 8px; }
+nav { display: flex; gap: 8px; }
+nav button { background: #eee9df; border: none; border-radius: 8px; padding: 8px 16px; cursor: pointer; font-size: 14px; }
+nav button.on { background: #7c9c6b; color: #fff; font-weight: 600; }
+button { background: #eee9df; border: none; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+button:hover { filter: brightness(0.95); }
+
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 5px 10px; border-bottom: 1px solid #ece8de; vertical-align: top; }
+th { color: #7a7568; font-weight: 600; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.bar { height: 4px; background: #b8cba8; border-radius: 2px; margin-top: 3px; min-width: 2px; }
+.badge { font-size: 11px; background: #f3e3c3; border-radius: 6px; padding: 1px 6px; margin-left: 6px; }
+.muted { color: #8b8679; }
+.small { font-size: 12px; }
+.big { font-size: 17px; }
+.error { color: #b0483e; }
+.plain { list-style: none; padding: 0; margin: 0; }
+.plain li { padding: 4px 6px; border-bottom: 1px solid #f0ece2; }
+
+.cards { display: flex; gap: 12px; margin: 8px 0 14px; flex-wrap: wrap; }
+.card { border-radius: 12px; padding: 12px 18px; min-width: 110px; text-align: center; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.card .cardnum { font-size: 26px; font-weight: 700; }
+.card.ok { border-top: 4px solid #7c9c6b; }
+.card.warn { border-top: 4px solid #d9a441; }
+
+.split { display: flex; gap: 18px; align-items: flex-start; }
+.pane { flex: 1; min-width: 0; }
+.click li { cursor: pointer; border-radius: 6px; }
+.click li:hover { background: #f0ece0; }
+.click li.active { background: #e3ecd9; }
+.movebar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; align-items: center; }
+.movebar button { background: #dcebd2; }
+.preview { background: #fff; border: 1px solid #e6e2d8; border-radius: 8px; padding: 12px; white-space: pre-wrap; word-break: break-word; max-height: 60vh; overflow-y: auto; font-size: 13px; }
