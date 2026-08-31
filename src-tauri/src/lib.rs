@@ -230,6 +230,120 @@ fn health_check() -> Result<Health, String> {
     Ok(Health { inbox_count, broken_links: broken, broken_links_total, tag_issues, naming_violations: naming, empty_files: empty })
 }
 
+// ---------- ゴミ掃除 ----------
+// Obsidianが量産する「無題のファイル」「無題のフォルダ」と0バイトmdを検出・削除する。
+// 中身があるものは deletable=false（要確認）として一覧に出すだけで、勝手には消さない。
+
+#[derive(Serialize)]
+struct GarbageItem {
+    path: String,
+    kind: String, // untitled_file / untitled_dir / zero_byte_md
+    size: u64,
+    deletable: bool,
+}
+
+fn scan_garbage_items(root: &Path) -> Vec<GarbageItem> {
+    let mut items = Vec::new();
+    for e in WalkDir::new(root).into_iter().filter_map(|e| e.ok()) {
+        let p = e.path();
+        if is_ignored(p) || p == root {
+            continue;
+        }
+        let name = p.file_name().unwrap_or_default().to_string_lossy();
+        if e.file_type().is_dir() {
+            if name.starts_with("無題のフォルダ") {
+                let empty = fs::read_dir(p).map(|mut d| d.next().is_none()).unwrap_or(false);
+                items.push(GarbageItem {
+                    path: rel(root, p),
+                    kind: "untitled_dir".into(),
+                    size: 0,
+                    deletable: empty,
+                });
+            }
+            continue;
+        }
+        let size = e.metadata().map(|m| m.len()).unwrap_or(0);
+        if name.starts_with("無題のファイル") {
+            // md/canvas/base いずれも、実質空（frontmatterや{}だけ）なら安全に消せる
+            let effectively_empty = size == 0
+                || fs::read_to_string(p)
+                    .map(|t| {
+                        let t = t.trim();
+                        t.is_empty() || t == "{}" || size < 100
+                    })
+                    .unwrap_or(false);
+            items.push(GarbageItem {
+                path: rel(root, p),
+                kind: "untitled_file".into(),
+                size,
+                deletable: effectively_empty,
+            });
+        } else if size == 0 && p.extension().map_or(false, |x| x == "md") {
+            // 0バイトmd。自動取り込み中の書きかけの可能性がある保護フォルダは除外
+            let r = rel(root, p);
+            let top = r.split('/').next().unwrap_or("");
+            if !PROTECTED.contains(&top) {
+                items.push(GarbageItem { path: r, kind: "zero_byte_md".into(), size: 0, deletable: true });
+            }
+        }
+    }
+    items.sort_by(|a, b| a.path.cmp(&b.path));
+    items
+}
+
+#[tauri::command]
+fn scan_garbage() -> Result<Vec<GarbageItem>, String> {
+    let root = vault_root();
+    if !root.exists() {
+        return Err(format!("Vaultが見つかりません: {}", root.display()));
+    }
+    Ok(scan_garbage_items(&root))
+}
+
+/// deletable なゴミだけ削除して、消したパス一覧を返す。削除は必ずログに残す。
+#[tauri::command]
+fn clean_garbage() -> Result<Vec<String>, String> {
+    let root = vault_root();
+    if !root.exists() {
+        return Err(format!("Vaultが見つかりません: {}", root.display()));
+    }
+    let items = scan_garbage_items(&root);
+    let mut deleted: Vec<String> = Vec::new();
+    let mut errors: Vec<String> = Vec::new();
+    // ファイルを先に消してから空フォルダを消す（フォルダ内の無題ファイルを消すと空になるケースに対応）
+    for it in items.iter().filter(|i| i.deletable && i.kind != "untitled_dir") {
+        let p = root.join(&it.path);
+        match fs::remove_file(&p) {
+            Ok(_) => deleted.push(it.path.clone()),
+            Err(e) => errors.push(format!("{}: {}", it.path, e)),
+        }
+    }
+    for it in items.iter().filter(|i| i.kind == "untitled_dir") {
+        let p = root.join(&it.path);
+        // ファイル削除後に空になったか見直す
+        if fs::read_dir(&p).map(|mut d| d.next().is_none()).unwrap_or(false) {
+            match fs::remove_dir(&p) {
+                Ok(_) => deleted.push(format!("{}/", it.path)),
+                Err(e) => errors.push(format!("{}: {}", it.path, e)),
+            }
+        }
+    }
+    if !deleted.is_empty() {
+        let log = root.join("_meta/整理ログ_オブシリアンくん.md");
+        let now = chrono::Local::now().format("%Y-%m-%d %H:%M");
+        let mut body = fs::read_to_string(&log)
+            .unwrap_or_else(|_| "# オブシリアンくん 振り分けログ\n\n| 日時 | 元 | 先 |\n|---|---|---|\n".into());
+        for d in &deleted {
+            body.push_str(&format!("| {now} | {d} | 🗑️ ゴミ掃除で削除 |\n"));
+        }
+        fs::write(&log, body).map_err(|e| format!("削除は成功しましたがログ書き込みに失敗: {e}"))?;
+    }
+    if !errors.is_empty() {
+        return Err(format!("一部削除に失敗: {}（成功: {}件）", errors.join(", "), deleted.len()));
+    }
+    Ok(deleted)
+}
+
 // ---------- Inbox振り分け ----------
 
 #[derive(Serialize)]
@@ -324,6 +438,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             vault_overview,
             health_check,
+            scan_garbage,
+            clean_garbage,
             list_inbox,
             list_dest_folders,
             read_note,

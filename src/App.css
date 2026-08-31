@@ -42,3 +42,6 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .movebar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; align-items: center; }
 .movebar button { background: #dcebd2; }
 .preview { background: #fff; border: 1px solid #e6e2d8; border-radius: 8px; padding: 12px; white-space: pre-wrap; word-break: break-word; max-height: 60vh; overflow-y: auto; font-size: 13px; }
+
+.danger { background: #f0d3c8; margin-left: 8px; }
+.toast { background: #e3ecd9; border-radius: 8px; padding: 8px 12px; }

@@ -14,6 +14,7 @@ type Health = {
   empty_files: string[];
 };
 type InboxItem = { path: string; name: string; mtime: number; preview: string };
+type GarbageItem = { path: string; kind: string; size: number; deletable: boolean };
 
 const fmtDate = (s: number) =>
   s ? new Date(s * 1000).toLocaleString("ja-JP", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—";
@@ -59,9 +60,21 @@ function OverviewTab() {
 
 function HealthTab() {
   const [h, setH] = useState<Health | null>(null);
+  const [garbage, setGarbage] = useState<GarbageItem[]>([]);
+  const [cleanMsg, setCleanMsg] = useState("");
   const [err, setErr] = useState("");
-  const load = () => invoke<Health>("health_check").then(setH).catch((e) => setErr(String(e)));
+  const load = () => {
+    invoke<Health>("health_check").then(setH).catch((e) => setErr(String(e)));
+    invoke<GarbageItem[]>("scan_garbage").then(setGarbage).catch(() => {});
+  };
   useEffect(() => { load(); }, []);
+  const clean = () => {
+    invoke<string[]>("clean_garbage")
+      .then((d) => { setCleanMsg(d.length ? `🗑️ ${d.length}件削除したで: ${d.join(" / ")}` : "消せるゴミは無かったで"); load(); })
+      .catch((e) => setCleanMsg(`⚠️ ${e}`));
+  };
+  const deletable = garbage.filter((g) => g.deletable);
+  const review = garbage.filter((g) => !g.deletable);
   if (err) return <p className="error">{err}</p>;
   if (!h) return <p className="muted">診断中…（2万ノートあるからちょっと待ってな）</p>;
   const ok = (n: number) => (n === 0 ? "ok" : "warn");
@@ -73,8 +86,19 @@ function HealthTab() {
         <div className={`card ${ok(h.tag_issues.length)}`}><div className="cardnum">{h.tag_issues.length}</div>タグゆれ</div>
         <div className={`card ${ok(h.naming_violations.length)}`}><div className="cardnum">{h.naming_violations.length}</div>命名ルール違反</div>
         <div className={`card ${ok(h.empty_files.length)}`}><div className="cardnum">{h.empty_files.length}</div>空ファイル</div>
+        <div className={`card ${ok(garbage.length)}`}><div className="cardnum">{garbage.length}</div>無題ゴミ</div>
       </div>
       <button onClick={() => { setH(null); load(); }}>再診断</button>
+      {deletable.length > 0 && <button className="danger" onClick={clean}>🗑️ ゴミ掃除（{deletable.length}件を削除）</button>}
+      {cleanMsg && <p>{cleanMsg}</p>}
+
+      {garbage.length > 0 && (<>
+        <h2>無題ファイル・無題フォルダ</h2>
+        <ul className="plain">
+          {deletable.map((g) => <li key={g.path}>🗑️ {g.path} <span className="muted small">（{g.size}B・掃除で消える）</span></li>)}
+          {review.map((g) => <li key={g.path}>⚠️ {g.path} <span className="muted small">（{g.size}B・中身があるから手動で確認してな）</span></li>)}
+        </ul>
+      </>)}
 
       {h.tag_issues.length > 0 && (<>
         <h2>タグゆれ</h2>
@@ -158,6 +182,13 @@ function InboxTab() {
 
 export default function App() {
   const [tab, setTab] = useState<"overview" | "health" | "inbox">("overview");
+  const [autoClean, setAutoClean] = useState("");
+  // 起動時に自動ゴミ掃除（空の無題ファイル・無題フォルダ・0バイトmdだけ。削除はログに記録される）
+  useEffect(() => {
+    invoke<string[]>("clean_garbage")
+      .then((d) => { if (d.length) setAutoClean(`🗑️ 起動時にゴミ ${d.length}件を自動掃除したで（${d.join(" / ")}）`); })
+      .catch((e) => setAutoClean(`⚠️ 自動掃除に失敗: ${e}`));
+  }, []);
   return (
     <main>
       <header>
@@ -168,6 +199,7 @@ export default function App() {
           <button className={tab === "inbox" ? "on" : ""} onClick={() => setTab("inbox")}>Inbox振り分け</button>
         </nav>
       </header>
+      {autoClean && <p className="toast">{autoClean}</p>}
       {tab === "overview" && <OverviewTab />}
       {tab === "health" && <HealthTab />}
       {tab === "inbox" && <InboxTab />}
